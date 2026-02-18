@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Watch episodes on BentoRoll with version switching and episode navigation.">
 <title>Watch - BentoRoll</title>
 <link rel="stylesheet" href="/src/styles/reset.css">
 <link rel="stylesheet" href="/src/styles/header.css">
@@ -13,12 +14,47 @@
 <link rel="stylesheet" href="/src/styles/watch.css">
 <link rel="stylesheet" href="/src/styles/labels.css">
 <link rel="stylesheet" href="/src/styles/responsive.css">
-<link rel="stylesheet" href="/src/styles/navbar.css"> <!-- navbar now fully modular -->
+<link rel="stylesheet" href="/src/styles/navbar.css">
 <link rel="icon" type="image/x-icon" href="https://i.ibb.co/pjJPbymj/image.png">
 <style>
+.watch-page {
+    width: min(1100px, calc(100% - 2rem));
+    margin: 1.5rem auto;
+}
 .video-fade-out {
     opacity: 0;
     transition: opacity 0.3s ease;
+}
+.watch-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: .8rem;
+    flex-wrap: wrap;
+}
+.watch-meta {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+}
+.meta-pill {
+    border-radius: 999px;
+    padding: .25rem .6rem;
+    background: #fff5ef;
+    border: 1px solid #ffd8c4;
+    color: #763a1f;
+    font-size: .8rem;
+    font-weight: 700;
+}
+.quick-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.quick-actions button {
+    border: 1px solid #eac2af;
+    border-radius: 999px;
+    padding: .45rem .8rem;
+    background: #fff;
+    cursor: pointer;
+    font-weight: 700;
 }
 .version-button {
     padding: 6px 14px;
@@ -28,23 +64,29 @@
     border: none;
     cursor: pointer;
     margin-right: 8px;
+    margin-bottom: .5rem;
     color: #fff;
     text-transform: uppercase;
     box-shadow: 0 4px 10px rgba(0,0,0,0.15);
     transition: transform 0.2s, box-shadow 0.2s;
 }
-.version-button:hover {
+.version-button:hover,
+.version-button:focus-visible {
     transform: translateY(-2px) scale(1.05);
     box-shadow: 0 6px 15px rgba(0,0,0,0.25);
-}
-.version-button:active {
-    transform: translateY(0) scale(0.98);
-    box-shadow: 0 3px 8px rgba(0,0,0,0.2);
 }
 .version-button.en { background-color: #f60; }
 .version-button.ja { background-color: #007aff; }
 .version-button.ko { background-color: #28a745; }
 .version-button.active { box-shadow: 0 6px 15px rgba(0,0,0,0.4); }
+.notice {
+    margin-top: .8rem;
+    border-radius: 12px;
+    border: 1px dashed #e3c3b4;
+    background: #fff9f6;
+    color: #6b483b;
+    padding: .8rem .9rem;
+}
 </style>
 </head>
 <body>
@@ -59,14 +101,22 @@
 </header>
 
 <main class="watch-page">
+    <section class="watch-toolbar" aria-label="Watch controls">
+        <div class="watch-meta" id="watch-meta"></div>
+        <div class="quick-actions">
+            <button id="skip-intro" type="button">Skip intro</button>
+            <button id="copy-link" type="button">Copy episode link</button>
+        </div>
+    </section>
+
     <div class="watch-container">
-        <video id="introVideo" autoplay playsinline class="video-player">
+        <video id="introVideo" autoplay playsinline class="video-player" muted>
             <source src="https://github.com/Vystelior/bentoroll.github.io/raw/refs/heads/main/src/intro.mp4" type="video/mp4">
             Your browser does not support the video tag.
         </video>
         <iframe id="player" class="video-player" frameborder="0" allowfullscreen style="display:none;"></iframe>
     </div>
-    
+
     <section class="episode-details">
         <h2 id="episode-title" class="watch-title">Loading...</h2>
         <p id="episode-description" class="episode-description-preview"></p>
@@ -77,6 +127,7 @@
             <button id="prev-btn" class="nav-button prev-button" disabled>&larr; Previous</button>
             <button id="next-btn" class="nav-button next-button" disabled>Next &rarr;</button>
         </div>
+        <p class="notice" id="watch-notice">Tip: Use ←/→ keyboard arrows for previous and next episode.</p>
     </section>
 </main>
 
@@ -86,11 +137,10 @@
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const epNumStr = params.get('episode');
-const epNum = parseInt(epNumStr);
-const seriesSlug = params.get('series') || "gachiakuta";
-const seasonNum = parseInt(params.get('season')) || 1;
-let version = params.get('version') || 'en';
+const episode = Number(params.get('episode'));
+const seriesSlug = params.get('series') || 'gachiakuta';
+const seasonNum = Number(params.get('season')) || 1;
+let version = params.get('version') || localStorage.getItem('preferredVersion') || 'en';
 
 const episodeTitle = document.getElementById('episode-title');
 const episodeDesc = document.getElementById('episode-description');
@@ -99,77 +149,151 @@ const prevBtn = document.getElementById('prev-btn');
 const nextBtn = document.getElementById('next-btn');
 const versionButtons = document.getElementById('version-buttons');
 const intro = document.getElementById('introVideo');
+const watchMeta = document.getElementById('watch-meta');
+const notice = document.getElementById('watch-notice');
 
-const capitalize = s => typeof s === 'string' ? s.charAt(0).toUpperCase() + s.slice(1) : '';
-const navigateToEpisode = (num, ver = version) => {
-    window.location.href = `watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${num}&version=${ver}`;
+const capitalize = (value) => typeof value === 'string' ? value.charAt(0).toUpperCase() + value.slice(1) : '';
+
+const navigateToEpisode = (epNum, ver = version) => {
+    window.location.href = `watch.html?series=${encodeURIComponent(seriesSlug)}&season=${seasonNum}&episode=${epNum}&version=${ver}`;
 };
 
 const showEpisode = (videoUrl) => {
+    if (!videoUrl || videoUrl === '#') {
+        notice.textContent = 'No playable source was found for this version.';
+        return;
+    }
+
     intro.classList.add('video-fade-out');
     setTimeout(() => {
         intro.remove();
         player.style.display = 'block';
         player.src = videoUrl;
-        player.allow = "autoplay; fullscreen";
+        player.allow = 'autoplay; fullscreen';
     }, 300);
 };
 
-fetch(`data/${seriesSlug}/season${seasonNum}.json`)
-.then(res => res.json())
-.then(episodes => {
-    episodes.sort((a,b) => a.episode - b.episode);
-    const currentIndex = episodes.findIndex(e => e.episode === epNum);
-    const ep = episodes[currentIndex];
+const updateMeta = () => {
+    watchMeta.innerHTML = `
+        <span class="meta-pill">${capitalize(seriesSlug)}</span>
+        <span class="meta-pill">Season ${seasonNum}</span>
+        <span class="meta-pill">Episode ${episode || '?'}</span>
+        <span class="meta-pill">${version.toUpperCase()} version</span>
+    `;
+};
 
-    if (ep) {
-        let videoUrl = ep.videos?.[version] || "#";
-        if (videoUrl.includes("streamtape") || videoUrl.includes("stape.fun"))
-            videoUrl = videoUrl.split("?")[0] + "?autoplay=1";
+const persistLastWatch = (episodeData) => {
+    const payload = {
+        seriesSlug,
+        seasonNum,
+        episode: episodeData.episode,
+        version,
+        title: episodeData.title,
+        watchedAt: Date.now()
+    };
+    localStorage.setItem('lastWatchedEpisode', JSON.stringify(payload));
+};
 
-        episodeTitle.textContent = `${capitalize(seriesSlug)} S${seasonNum}E${ep.episode}: ${ep.title}`;
-        episodeDesc.textContent = ep.description || "No description available.";
-        document.title = `${capitalize(seriesSlug)} S${seasonNum}E${ep.episode} | BentoRoll`;
-
-        versionButtons.innerHTML = '';
-        Object.keys(ep.videos).forEach(lang => {
-            const btn = document.createElement('button');
-            btn.textContent = lang.toUpperCase();
-            btn.className = `version-button ${lang}` + (lang === version ? ' active' : '');
-            btn.onclick = () => navigateToEpisode(ep.episode, lang);
-            versionButtons.appendChild(btn);
-        });
-
-        const prevEp = episodes[currentIndex - 1];
-        const nextEp = episodes[currentIndex + 1];
-        if (prevEp) {
-            prevBtn.disabled = false;
-            prevBtn.textContent = `← Ep ${prevEp.episode}`;
-            prevBtn.onclick = () => navigateToEpisode(prevEp.episode, version);
-        }
-        if (nextEp) {
-            nextBtn.disabled = false;
-            nextBtn.textContent = `Ep ${nextEp.episode} →`;
-            nextBtn.onclick = () => navigateToEpisode(nextEp.episode, version);
-        }
-
-        intro.onended = () => showEpisode(videoUrl);
-        intro.onclick = () => showEpisode(videoUrl);
-    } else {
-        episodeTitle.textContent = `Episode ${epNum} not found in Season ${seasonNum}.`;
-        episodeDesc.style.display = 'none';
-        player.style.display = 'none';
+const getPlayableUrl = (rawUrl) => {
+    if (!rawUrl) return '#';
+    if (rawUrl.includes('streamtape') || rawUrl.includes('stape.fun')) {
+        return rawUrl.split('?')[0] + '?autoplay=1';
     }
-})
-.catch(err => {
-    console.error("Error loading:", err);
-    episodeTitle.textContent = "Failed to load episode data.";
+    return rawUrl;
+};
+
+const setNotice = (text) => {
+    notice.textContent = text;
+};
+
+if (!Number.isInteger(episode) || episode <= 0) {
+    episodeTitle.textContent = 'Invalid episode number.';
+    episodeDesc.textContent = 'Please return to the series page and pick an episode.';
+    intro.style.display = 'none';
+    setNotice('The URL is missing a valid episode.');
+} else {
+    fetch(`data/${seriesSlug}/season${seasonNum}.json`)
+        .then((res) => {
+            if (!res.ok) throw new Error('Failed to load season data.');
+            return res.json();
+        })
+        .then((episodes) => {
+            const orderedEpisodes = [...episodes].sort((a, b) => Number(a.episode) - Number(b.episode));
+            const currentIndex = orderedEpisodes.findIndex((entry) => Number(entry.episode) === episode);
+            const ep = orderedEpisodes[currentIndex];
+
+            if (!ep) {
+                throw new Error(`Episode ${episode} not found in season ${seasonNum}.`);
+            }
+
+            if (!ep.videos?.[version]) {
+                const fallback = Object.keys(ep.videos || {})[0];
+                if (fallback) version = fallback;
+            }
+
+            const videoUrl = getPlayableUrl(ep.videos?.[version]);
+            episodeTitle.textContent = `${capitalize(seriesSlug)} S${seasonNum}E${ep.episode}: ${ep.title}`;
+            episodeDesc.textContent = ep.description || 'No description available.';
+            document.title = `${capitalize(seriesSlug)} S${seasonNum}E${ep.episode} | BentoRoll`;
+            localStorage.setItem('preferredVersion', version);
+            persistLastWatch(ep);
+            updateMeta();
+
+            versionButtons.innerHTML = '';
+            Object.keys(ep.videos || {}).forEach((lang) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = lang.toUpperCase();
+                btn.className = `version-button ${lang}` + (lang === version ? ' active' : '');
+                btn.addEventListener('click', () => navigateToEpisode(ep.episode, lang));
+                versionButtons.appendChild(btn);
+            });
+
+            const prevEp = orderedEpisodes[currentIndex - 1];
+            const nextEp = orderedEpisodes[currentIndex + 1];
+
+            if (prevEp) {
+                prevBtn.disabled = false;
+                prevBtn.textContent = `← Ep ${prevEp.episode}`;
+                prevBtn.onclick = () => navigateToEpisode(prevEp.episode, version);
+            }
+            if (nextEp) {
+                nextBtn.disabled = false;
+                nextBtn.textContent = `Ep ${nextEp.episode} →`;
+                nextBtn.onclick = () => navigateToEpisode(nextEp.episode, version);
+            }
+
+            intro.onended = () => showEpisode(videoUrl);
+            intro.onclick = () => showEpisode(videoUrl);
+            document.getElementById('skip-intro').onclick = () => showEpisode(videoUrl);
+
+            setNotice('Tip: Use ←/→ keyboard arrows for episode navigation.');
+
+            document.addEventListener('keydown', (event) => {
+                if (event.target?.tagName === 'INPUT' || event.target?.tagName === 'TEXTAREA') return;
+                if (event.key === 'ArrowLeft' && !prevBtn.disabled) prevBtn.click();
+                if (event.key === 'ArrowRight' && !nextBtn.disabled) nextBtn.click();
+            });
+        })
+        .catch((error) => {
+            console.error('Error loading:', error);
+            episodeTitle.textContent = 'Failed to load episode data.';
+            episodeDesc.textContent = error.message;
+            intro.style.display = 'none';
+            setNotice('Try going back to the series page and selecting another episode.');
+        });
+}
+
+document.getElementById('copy-link').addEventListener('click', async () => {
+    try {
+        await navigator.clipboard.writeText(window.location.href);
+        setNotice('Episode link copied to clipboard.');
+    } catch {
+        setNotice('Unable to copy link on this browser.');
+    }
 });
 </script>
 
-
-<!-- Import navbar.js for logo click -->
 <script src="/src/scripts/navbar.js"></script>
-
 </body>
 </html>
