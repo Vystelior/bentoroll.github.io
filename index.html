@@ -17,10 +17,19 @@
 <link rel="stylesheet" href="/src/styles/watch.css">
 <link rel="stylesheet" href="/src/styles/labels.css">
 <link rel="stylesheet" href="/src/styles/responsive.css">
-<link rel="stylesheet" href="/src/styles/navbar.css"> <!-- modular navbar -->
+<link rel="stylesheet" href="/src/styles/navbar.css">
 <link rel="icon" type="image/x-icon" href="https://i.ibb.co/pjJPbymj/image.png">
 <style>
-/* Hero Section */
+:root {
+    --brand: #e1501d;
+    --brand-dark: #bb3d14;
+    --surface: #fff;
+    --muted: #5a5a5a;
+}
+body {
+    background: linear-gradient(180deg,#fffaf4 0%,#fff 300px);
+    color: #222;
+}
 .hero {
     position: relative;
     text-align: center;
@@ -32,36 +41,36 @@
     overflow: hidden;
 }
 .hero h2 {
-    font-size: 2.8rem;
+    font-size: clamp(1.8rem, 3vw, 3rem);
     margin-bottom: 12px;
-    color: #e1501d;
+    color: var(--brand);
 }
 .hero p {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     margin-bottom: 20px;
     color: #333;
 }
 .hero-button {
     display: inline-block;
-    background-color: #e1501d;
+    background-color: var(--brand);
     color: #fff;
     font-weight: bold;
     padding: 12px 28px;
     border-radius: 25px;
     text-decoration: none;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
-.hero-button:hover {
-    transform: translateY(-2px) scale(1.05);
+.hero-button:hover,
+.hero-button:focus-visible {
+    background-color: var(--brand-dark);
+    transform: translateY(-2px) scale(1.04);
     box-shadow: 0 6px 15px rgba(0,0,0,0.2);
 }
-
-/* Mascot Styling */
 #mascot {
     position: absolute;
     bottom: 0;
     right: 20px;
-    width: 120px;
+    width: min(120px, 20vw);
     transform: scaleX(-1);
     z-index: 2;
     pointer-events: none;
@@ -71,18 +80,20 @@
     0%,100% { transform: translateY(0) scaleX(-1); }
     50% { transform: translateY(-10px) scaleX(-1); }
 }
-
-/* Adblocker Banner */
+.home-section {
+    width: min(1200px, calc(100% - 2rem));
+    margin: 1rem auto;
+}
 #adblocker-banner {
-    background-color: #FFF3CD;
+    background-color: #fff3cd;
     color: #856404;
-    border: 1px solid #FFE8A1;
-    padding: 15px 20px;
-    margin: 20px auto;
-    max-width: 800px;
+    border: 1px solid #ffe8a1;
+    padding: 15px 40px 15px 20px;
+    margin: 1rem auto;
+    max-width: 1200px;
     text-align: center;
     font-family: Arial, sans-serif;
-    font-weight: bold;
+    font-weight: 700;
     border-radius: 8px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     position: relative;
@@ -97,67 +108,116 @@
     cursor: pointer;
     color: #856404;
 }
-#adblocker-banner button:focus {
-    outline: 2px solid #e1501d;
-    border-radius: 50%;
+.controls-card {
+    background: var(--surface);
+    border: 1px solid #f4d1c3;
+    border-radius: 16px;
+    padding: 1rem;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.06);
 }
-
-/* Series Grid */
+.controls-grid {
+    display: grid;
+    gap: .75rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+label {
+    font-size: .92rem;
+    color: #444;
+    font-weight: 700;
+}
+.input,
+.select {
+    border: 1px solid #dfc6bc;
+    border-radius: 10px;
+    padding: .65rem .75rem;
+    font-size: .95rem;
+}
+.stats-row {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-top: .9rem;
+}
+.stat-pill {
+    background: #fff3eb;
+    color: #7a351c;
+    border: 1px solid #ffd3bf;
+    border-radius: 999px;
+    padding: .35rem .7rem;
+    font-size: .84rem;
+    font-weight: 700;
+}
 .series-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill,minmax(180px,1fr));
     gap: 20px;
-    padding: 20px;
     max-width: 1200px;
-    margin: 0 auto;
+    margin: 1rem auto 2rem;
+    width: min(1200px, calc(100% - 2rem));
 }
 .series-card {
-    background: #fff;
+    background: var(--surface);
     border-radius: 15px;
     overflow: hidden;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    border: 1px solid #f1e2db;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
     cursor: pointer;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-.series-card:hover {
+.series-card:hover,
+.series-card:focus-visible {
     transform: translateY(-5px) scale(1.02);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.16);
 }
 .series-card img {
     width: 100%;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
     display: block;
 }
 .series-info {
-    padding: 10px 12px;
+    padding: 10px 12px 14px;
     text-align: center;
 }
 .series-info h3 {
-    font-size: 1.1rem;
+    font-size: 1rem;
     margin: 0;
     color: #333;
 }
-
-/* Responsive adjustments */
+.series-info p {
+    color: var(--muted);
+    font-size: .82rem;
+    margin-top: .35rem;
+}
+.empty-state {
+    text-align: center;
+    color: #6d4e41;
+    padding: 2rem;
+    background: #fff7f3;
+    border: 1px dashed #f2c7b5;
+    border-radius: 14px;
+    width: min(1200px, calc(100% - 2rem));
+    margin: 1rem auto 2rem;
+}
 @media (max-width: 768px) {
-    .hero h2 { font-size: 2.2rem; }
     .hero p { font-size: 1rem; }
     .series-grid { grid-template-columns: repeat(auto-fill,minmax(140px,1fr)); }
-}
-@media (max-width: 480px) {
-    .hero h2 { font-size: 1.8rem; }
-    .hero p { font-size: 0.95rem; }
 }
 </style>
 </head>
 <body>
-
 <header>
     <div id="logo-container">
         <img src="https://i.ibb.co/pjJPbymj/image.png" alt="BentoRoll Logo" id="logo-img">
         <h1 id="logo-text">BentoRoll</h1>
     </div>
     <nav>
-        <a href="index.html">Home</a>
+        <a href="index.html" aria-current="page">Home</a>
     </nav>
 </header>
 
@@ -170,11 +230,36 @@
     </section>
 
     <div id="adblocker-banner">
-        ⚠️ You need an adblocker. Some ads can be adult, malicious, or otherwise unsafe. ⚠️
-        <button onclick="this.parentElement.style.display='none'">&times;</button>
+        ⚠️ Use an adblocker. Some third-party hosts may include unsafe or adult ads.
+        <button type="button" aria-label="Dismiss warning">&times;</button>
     </div>
 
-    <section id="series-container" class="series-grid">
+    <section class="home-section controls-card" aria-label="Browse filters">
+        <div class="controls-grid">
+            <div class="field">
+                <label for="search">Search series</label>
+                <input id="search" class="input" type="search" placeholder="Type a series title..." autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="sort">Sort</label>
+                <select id="sort" class="select">
+                    <option value="az">A → Z</option>
+                    <option value="za">Z → A</option>
+                    <option value="new">Newest first</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="layout">Card size</label>
+                <select id="layout" class="select">
+                    <option value="comfortable">Comfortable</option>
+                    <option value="compact">Compact</option>
+                </select>
+            </div>
+        </div>
+        <div class="stats-row" id="stats-row"></div>
+    </section>
+
+    <section id="series-container" class="series-grid" aria-live="polite">
         <div id="loading-text">Loading series...</div>
     </section>
 </main>
@@ -184,41 +269,118 @@
 </footer>
 
 <script>
-// Load series dynamically
-fetch('data/series.json')
-.then(res => {
-    if (!res.ok) throw new Error('Series data not found.');
-    return res.json();
-})
-.then(seriesList => {
-    const container = document.getElementById('series-container');
-    container.innerHTML = '';
-    seriesList.sort((a,b)=>a.title.localeCompare(b.title));
-    seriesList.forEach(series => {
-        const card = document.createElement('div');
-        card.className = 'series-card';
-        card.setAttribute('tabindex','0');
-        card.innerHTML = `
-            <img src="${series.poster}" alt="${series.title} Poster">
-            <div class="series-info">
-                <h3>${series.title}</h3>
-            </div>
-        `;
-        card.onclick = () => window.location.href = `series.html?series=${series.slug}`;
-        card.onkeypress = e => { if(e.key==='Enter') card.click(); };
-        container.appendChild(card);
-    });
-})
-.catch(err => {
-    const loadingText = document.getElementById('loading-text');
-    loadingText.textContent = 'Error loading series. Please try again later.';
-    loadingText.style.color = '#e1501d';
-    console.error(err);
+const state = { series: [], filtered: [] };
+const container = document.getElementById('series-container');
+const searchInput = document.getElementById('search');
+const sortSelect = document.getElementById('sort');
+const layoutSelect = document.getElementById('layout');
+const statsRow = document.getElementById('stats-row');
+
+document.querySelector('#adblocker-banner button').addEventListener('click', (event) => {
+    event.currentTarget.parentElement.style.display = 'none';
 });
+
+const sorters = {
+    az: (a, b) => a.title.localeCompare(b.title),
+    za: (a, b) => b.title.localeCompare(a.title),
+    new: (a, b) => (b.year || 0) - (a.year || 0) || a.title.localeCompare(b.title)
+};
+
+const getSeasonCount = (series) => Number(series.seasons || series.totalSeasons || 0);
+
+const updateStats = (visibleCount) => {
+    const totalSeasons = state.series.reduce((sum, item) => sum + getSeasonCount(item), 0);
+    statsRow.innerHTML = `
+        <span class="stat-pill">${state.series.length} total series</span>
+        <span class="stat-pill">${visibleCount} visible</span>
+        <span class="stat-pill">${totalSeasons || 'Unknown'} listed seasons</span>
+    `;
+};
+
+const createCard = (series) => {
+    const card = document.createElement('article');
+    card.className = 'series-card';
+    card.tabIndex = 0;
+
+    const poster = document.createElement('img');
+    poster.src = series.poster;
+    poster.alt = `${series.title} poster`;
+    poster.loading = 'lazy';
+
+    const info = document.createElement('div');
+    info.className = 'series-info';
+
+    const title = document.createElement('h3');
+    title.textContent = series.title;
+
+    const subtitle = document.createElement('p');
+    const seasonCount = getSeasonCount(series);
+    subtitle.textContent = seasonCount ? `${seasonCount} season${seasonCount > 1 ? 's' : ''}` : 'Episode archive';
+
+    info.append(title, subtitle);
+    card.append(poster, info);
+
+    const goToSeries = () => {
+        window.location.href = `series.html?series=${encodeURIComponent(series.slug)}`;
+    };
+
+    card.addEventListener('click', goToSeries);
+    card.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            goToSeries();
+        }
+    });
+
+    return card;
+};
+
+const render = () => {
+    const query = searchInput.value.trim().toLowerCase();
+    const sorter = sorters[sortSelect.value] || sorters.az;
+    state.filtered = state.series
+        .filter((series) => series.title.toLowerCase().includes(query))
+        .sort(sorter);
+
+    container.className = state.filtered.length ? 'series-grid' : 'empty-state';
+    container.innerHTML = '';
+
+    if (!state.filtered.length) {
+        container.textContent = query
+            ? `No series matched “${query}”. Try a shorter search.`
+            : 'No series found right now. Please check back later.';
+    } else {
+        state.filtered.forEach((series) => container.appendChild(createCard(series)));
+    }
+
+    if (state.filtered.length) {
+        container.style.gridTemplateColumns = layoutSelect.value === 'compact'
+            ? 'repeat(auto-fill,minmax(140px,1fr))'
+            : 'repeat(auto-fill,minmax(180px,1fr))';
+    } else {
+        container.style.gridTemplateColumns = '';
+    }
+
+    updateStats(state.filtered.length);
+};
+
+fetch('data/series.json')
+    .then((res) => {
+        if (!res.ok) throw new Error('Series data not found.');
+        return res.json();
+    })
+    .then((seriesList) => {
+        state.series = Array.isArray(seriesList) ? seriesList : [];
+        render();
+    })
+    .catch((err) => {
+        console.error(err);
+        container.innerHTML = '<div class="empty-state">Error loading series. Please try again later.</div>';
+    });
+
+[searchInput, sortSelect, layoutSelect].forEach((el) => el.addEventListener('input', render));
 </script>
 
-<!-- Modular Navbar JS -->
 <script src="/src/scripts/navbar.js"></script>
-
 </body>
 </html>

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Browse BentoRoll episodes by season and language.">
 <title>Series Episodes - BentoRoll</title>
 <link rel="stylesheet" href="/src/styles/reset.css">
 <link rel="stylesheet" href="/src/styles/header.css">
@@ -16,29 +17,40 @@
 <link rel="stylesheet" href="/src/styles/navbar.css">
 <link rel="icon" type="image/x-icon" href="https://i.ibb.co/pjJPbymj/image.png">
 <style>
-/* --- Season Selector --- */
-#season-selector {
-    margin: 10px 0 20px;
-    padding: 8px 14px;
+.series-details-page {
+    width: min(1100px, calc(100% - 2rem));
+    margin: 1.5rem auto;
+}
+.breadcrumbs {
+    margin-bottom: .8rem;
+    color: #6d6d6d;
+}
+.breadcrumbs a { color: #d84a19; text-decoration: none; }
+.toolbar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit,minmax(210px,1fr));
+    gap: .75rem;
+    margin: 1rem 0 1.2rem;
+}
+.toolbar .field { display: flex; flex-direction: column; gap: .3rem; }
+.toolbar label { font-weight: 700; color: #444; font-size: .9rem; }
+.toolbar input,
+.toolbar select {
+    border: 1px solid #e5c9ba;
     border-radius: 10px;
-    border: none;
-    font-size: 15px;
-    font-weight: 600;
-    background-color: #f60;
+    padding: .6rem .7rem;
+}
+#season-selector {
+    background: #f60;
     color: #fff;
+    font-weight: 700;
     cursor: pointer;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
 }
-#season-selector:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(0,0,0,0.25);
-}
-
-/* Language Buttons */
 .episode-version-links {
     margin-top: 8px;
     display: flex;
     gap: 10px;
+    flex-wrap: wrap;
 }
 .episode-version-links a {
     display: inline-block;
@@ -55,8 +67,32 @@
 .episode-version-links a[href*="version=en"] { background-color: #f60; }
 .episode-version-links a[href*="version=ja"] { background-color: #007aff; }
 .episode-version-links a[href*="version=ko"] { background-color: #28a745; }
-.episode-version-links a:hover { transform: scale(1.05); }
+.episode-version-links a:hover,
+.episode-version-links a:focus-visible { transform: scale(1.05); }
 .episode-thumbnail a { pointer-events: none; }
+.meta-row {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-bottom: .7rem;
+}
+.meta-pill {
+    border-radius: 999px;
+    padding: .2rem .6rem;
+    background: #fff5ef;
+    border: 1px solid #ffd8c4;
+    color: #763a1f;
+    font-size: .8rem;
+    font-weight: 700;
+}
+.notice {
+    text-align: center;
+    padding: 1.2rem;
+    border-radius: 12px;
+    border: 1px dashed #e3c3b4;
+    background: #fff9f6;
+    color: #6b483b;
+}
 </style>
 </head>
 <body>
@@ -69,12 +105,33 @@
 </header>
 
 <main class="series-details-page">
+    <p class="breadcrumbs"><a href="index.html">Home</a> / <span id="crumb-series">Series</span></p>
     <h2 id="series-title" class="series-title">Loading Series...</h2>
     <p id="series-description" class="series-description"></p>
-    <div id="season-container"></div>
+    <div class="meta-row" id="meta-row"></div>
+
+    <section class="toolbar" aria-label="Episode controls">
+        <div class="field">
+            <label for="season-selector">Season</label>
+            <select id="season-selector" aria-label="Select season"></select>
+        </div>
+        <div class="field">
+            <label for="episode-search">Find episode</label>
+            <input id="episode-search" type="search" placeholder="Episode title or number">
+        </div>
+        <div class="field">
+            <label for="language-filter">Language available</label>
+            <select id="language-filter">
+                <option value="all">All languages</option>
+                <option value="en">English</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+            </select>
+        </div>
+    </section>
 
     <h3 class="episode-list-header">Episodes</h3>
-    <section id="episode-list" class="episode-list-container">
+    <section id="episode-list" class="episode-list-container" aria-live="polite">
         <div id="episode-loading">Loading episodes...</div>
     </section>
 </main>
@@ -87,107 +144,179 @@ const seriesSlug = params.get('series');
 const titleEl = document.getElementById('series-title');
 const descEl = document.getElementById('series-description');
 const listEl = document.getElementById('episode-list');
-const seasonContainer = document.getElementById('season-container');
+const seasonSelector = document.getElementById('season-selector');
+const episodeSearch = document.getElementById('episode-search');
+const languageFilter = document.getElementById('language-filter');
+const metaRow = document.getElementById('meta-row');
+const crumbSeries = document.getElementById('crumb-series');
 
-if (!seriesSlug) {
-    titleEl.textContent = "Series not specified.";
-    document.getElementById('episode-loading').style.display = 'none';
-} else {
-    fetch('data/series.json')
-    .then(res => res.json())
-    .then(seriesList => {
-        const seriesData = seriesList.find(s => s.slug === seriesSlug);
-        if (seriesData) {
-            titleEl.textContent = seriesData.title;
-            descEl.textContent = seriesData.description || "No description is available for this series.";
-            document.title = `${seriesData.title} | BentoRoll`;
-        } else {
-            titleEl.textContent = seriesSlug.toUpperCase();
-            descEl.textContent = "Series details not found.";
-        }
-    })
-    .catch(console.error);
+const state = { seasons: [], activeSeason: null };
 
-    const loadSeason = async (n) => {
-        const path = `data/${seriesSlug}/season${n}.json`;
-        try {
-            const res = await fetch(path);
-            if (!res.ok) return null;
-            const data = await res.json();
-            return data;
-        } catch {
-            return null;
-        }
-    };
+const showNotice = (text) => {
+    listEl.className = 'notice';
+    listEl.textContent = text;
+};
 
-    const loadAllSeasons = async () => {
-        const promises = [];
-        for (let i = 1; i <= 10; i++) promises.push(loadSeason(i));
-        const results = (await Promise.all(promises))
-            .map((eps, idx) => ({ season: idx + 1, episodes: eps }))
-            .filter(r => r.episodes);
-        if (!results.length) throw new Error("No seasons found.");
-        return results;
-    };
+const safeText = (value, fallback = '') => typeof value === 'string' && value.trim() ? value : fallback;
 
-    loadAllSeasons().then(seasons => {
-        listEl.innerHTML = '';
-        const label = document.createElement('label');
-        label.htmlFor = 'season-selector';
-        label.textContent = 'Select Season:';
-        label.style.fontWeight = '600';
-        label.style.display = 'block';
-        label.style.marginBottom = '8px';
+const renderMeta = () => {
+    const totalEpisodes = state.seasons.reduce((sum, s) => sum + s.episodes.length, 0);
+    const seasonCount = state.seasons.length;
+    const latestSeason = seasonCount ? state.seasons[seasonCount - 1].season : 0;
+    metaRow.innerHTML = `
+        <span class="meta-pill">${seasonCount} season${seasonCount !== 1 ? 's' : ''}</span>
+        <span class="meta-pill">${totalEpisodes} episode${totalEpisodes !== 1 ? 's' : ''}</span>
+        <span class="meta-pill">Latest: S${latestSeason || '?'}</span>
+    `;
+};
 
-        const selector = document.createElement('select');
-        selector.id = 'season-selector';
-        seasons.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s.season;
-            opt.textContent = `Season ${s.season}`;
-            selector.appendChild(opt);
+const buildEpisodeItem = (seasonNum, ep) => {
+    const item = document.createElement('article');
+    item.className = 'episode-list-item';
+
+    const thumbWrap = document.createElement('div');
+    thumbWrap.className = 'episode-thumbnail';
+    const thumbAnchor = document.createElement('a');
+    thumbAnchor.href = 'javascript:void(0)';
+    const img = document.createElement('img');
+    img.src = ep.cover;
+    img.alt = `Episode ${ep.episode} thumbnail`;
+    img.loading = 'lazy';
+    thumbAnchor.appendChild(img);
+    thumbWrap.appendChild(thumbAnchor);
+
+    const content = document.createElement('div');
+    content.className = 'episode-text-content';
+
+    const heading = document.createElement('p');
+    heading.className = 'episode-number-title';
+    heading.textContent = `E${ep.episode} - ${safeText(ep.title, 'Untitled')}`;
+
+    const description = document.createElement('p');
+    description.className = 'episode-description-preview';
+    description.textContent = safeText(ep.description, 'No description available for this episode.');
+
+    const links = document.createElement('div');
+    links.className = 'episode-version-links';
+    ['en', 'ja', 'ko'].forEach((lang) => {
+        if (!ep.videos?.[lang]) return;
+        const link = document.createElement('a');
+        link.href = `watch.html?series=${encodeURIComponent(seriesSlug)}&season=${seasonNum}&episode=${ep.episode}&version=${lang}`;
+        link.textContent = lang;
+        links.appendChild(link);
+    });
+
+    content.append(heading, description, links);
+    item.append(thumbWrap, content);
+
+    return item;
+};
+
+const renderSeason = () => {
+    const season = state.seasons.find((entry) => Number(entry.season) === Number(state.activeSeason));
+    if (!season) {
+        showNotice('Season data is unavailable.');
+        return;
+    }
+
+    const query = episodeSearch.value.trim().toLowerCase();
+    const lang = languageFilter.value;
+    const filtered = [...season.episodes]
+        .sort((a, b) => Number(a.episode) - Number(b.episode))
+        .filter((ep) => {
+            const matchesQuery = !query || String(ep.episode).includes(query) || safeText(ep.title).toLowerCase().includes(query);
+            const matchesLanguage = lang === 'all' || Boolean(ep.videos?.[lang]);
+            return matchesQuery && matchesLanguage;
         });
 
-        seasonContainer.appendChild(label);
-        seasonContainer.appendChild(selector);
+    listEl.className = 'episode-list-container';
+    listEl.innerHTML = '';
 
-        // Default to the last available season
-        const defaultSeason = seasons[seasons.length - 1].season;
-        selector.value = defaultSeason;
+    if (!filtered.length) {
+        showNotice('No episodes match these filters.');
+        return;
+    }
 
-        const renderSeason = (seasonNum) => {
-            const seasonData = seasons.find(s => s.season == seasonNum);
-            listEl.innerHTML = '';
-            seasonData.episodes.sort((a,b) => a.episode - b.episode).forEach(ep => {
-                const item = document.createElement('div');
-                item.className = 'episode-list-item';
-                item.innerHTML = `
-                    <div class="episode-thumbnail">
-                        <a href="javascript:void(0)">
-                            <img src="${ep.cover}" alt="Episode ${ep.episode} thumbnail">
-                        </a>
-                    </div>
-                    <div class="episode-text-content">
-                        <p class="episode-number-title">E${ep.episode} - ${ep.title}</p>
-                        <p class="episode-description-preview">${ep.description || "No description available for this episode."}</p>
-                        <div class="episode-version-links">
-                            ${ep.videos?.en ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=en">EN</a>` : ''}
-                            ${ep.videos?.ja ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=ja">JA</a>` : ''}
-                            ${ep.videos?.ko ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=ko">KO</a>` : ''}
-                        </div>
-                    </div>
-                `;
-                listEl.appendChild(item);
+    filtered.forEach((ep) => listEl.appendChild(buildEpisodeItem(season.season, ep)));
+};
+
+const loadSeason = async (seasonNumber) => {
+    try {
+        const res = await fetch(`data/${seriesSlug}/season${seasonNumber}.json`);
+        if (!res.ok) return null;
+        const episodes = await res.json();
+        if (!Array.isArray(episodes) || !episodes.length) return null;
+        return { season: seasonNumber, episodes };
+    } catch {
+        return null;
+    }
+};
+
+const loadAllSeasons = async () => {
+    const loaded = [];
+    let misses = 0;
+    for (let seasonNumber = 1; seasonNumber <= 30; seasonNumber += 1) {
+        const season = await loadSeason(seasonNumber);
+        if (season) {
+            loaded.push(season);
+            misses = 0;
+        } else {
+            misses += 1;
+            if (misses >= 3 && seasonNumber > 5) break;
+        }
+    }
+    if (!loaded.length) throw new Error('No seasons found.');
+    return loaded;
+};
+
+if (!seriesSlug) {
+    titleEl.textContent = 'Series not specified.';
+    descEl.textContent = 'Open a series from the home page to view episodes.';
+    showNotice('Missing series in URL.');
+} else {
+    Promise.all([
+        fetch('data/series.json').then((res) => res.json()),
+        loadAllSeasons()
+    ])
+        .then(([seriesList, seasons]) => {
+            state.seasons = seasons;
+            state.activeSeason = seasons[seasons.length - 1].season;
+
+            const seriesData = Array.isArray(seriesList) ? seriesList.find((s) => s.slug === seriesSlug) : null;
+            if (seriesData) {
+                titleEl.textContent = safeText(seriesData.title, seriesSlug.toUpperCase());
+                crumbSeries.textContent = safeText(seriesData.title, 'Series');
+                descEl.textContent = safeText(seriesData.description, 'No description is available for this series.');
+                document.title = `${safeText(seriesData.title, seriesSlug)} | BentoRoll`;
+            } else {
+                titleEl.textContent = seriesSlug.toUpperCase();
+                descEl.textContent = 'Series details not found.';
+                crumbSeries.textContent = seriesSlug;
+            }
+
+            seasonSelector.innerHTML = '';
+            seasons.forEach((season) => {
+                const opt = document.createElement('option');
+                opt.value = season.season;
+                opt.textContent = `Season ${season.season}`;
+                seasonSelector.appendChild(opt);
             });
-        };
+            seasonSelector.value = state.activeSeason;
 
-        renderSeason(defaultSeason);
-        selector.onchange = (e) => renderSeason(e.target.value);
-    })
-    .catch(err => {
-        document.getElementById('episode-loading').textContent = `Failed to load episodes for ${seriesSlug}.`;
-        console.error(err);
+            renderMeta();
+            renderSeason();
+        })
+        .catch((error) => {
+            console.error(error);
+            showNotice(`Failed to load episodes for ${seriesSlug}.`);
+        });
+
+    seasonSelector.addEventListener('change', (event) => {
+        state.activeSeason = Number(event.target.value);
+        renderSeason();
     });
+    episodeSearch.addEventListener('input', renderSeason);
+    languageFilter.addEventListener('change', renderSeason);
 }
 </script>
 
