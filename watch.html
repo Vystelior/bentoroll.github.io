@@ -59,6 +59,7 @@
 
 <footer><p>&copy; 2025 BentoRoll. All rights not reserved.</p></footer>
 
+<script src="/src/scripts/provider-adapters.js"></script>
 <script>
 const params = new URLSearchParams(window.location.search);
 const epNum = parseInt(params.get('episode'));
@@ -66,6 +67,7 @@ const seriesSlug = params.get('series') || 'gachiakuta';
 const malIdFromQuery = params.get('mal');
 const seasonNum = parseInt(params.get('season')) || 1;
 let version = params.get('version') || 'en';
+const demoMode = params.get('demo') === '1';
 
 const episodeTitle = document.getElementById('episode-title');
 const episodeDesc = document.getElementById('episode-description');
@@ -119,33 +121,20 @@ const navigateToEpisode = (num, ver = version) => {
     window.location.href = `watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${num}&version=${ver}${malQuery}`;
 };
 
-const buildFallbackLinks = (title, epNumber) => {
-    const query = encodeURIComponent(`${title} episode ${epNumber}`);
-    return [
-        { label: 'Crunchyroll Search', href: `https://www.crunchyroll.com/search?q=${query}` },
-        { label: 'YouTube Search', href: `https://www.youtube.com/results?search_query=${query}` },
-        { label: 'AniList', href: `https://anilist.co/search/anime?search=${encodeURIComponent(title)}` },
-        { label: 'MyAnimeList', href: `https://myanimelist.net/anime.php?q=${encodeURIComponent(title)}` }
-    ];
-};
-
-const fetchOfficialStreamingLinks = async () => {
-    if (!resolvedMalId) return [];
-    const res = await fetch(`https://api.jikan.moe/v4/anime/${resolvedMalId}/full`);
-    if (!res.ok) return [];
-    const payload = await res.json();
-    const streaming = payload?.data?.streaming || [];
-    return streaming
-        .filter(item => item?.url && item?.name)
-        .map(item => ({ label: item.name, href: item.url }));
-};
-
 const renderAlternativeLinks = async (title, epNumber) => {
     providerLinks.innerHTML = '<strong>Alternative watch links:</strong> ';
-    const officialLinks = await fetchOfficialStreamingLinks().catch(() => []);
-    const linksToShow = officialLinks.length ? officialLinks : buildFallbackLinks(title, epNumber);
 
-    linksToShow.forEach(item => {
+    const adapters = demoMode
+        ? [new ProviderAdapters.MockEducationalAdapter(), new ProviderAdapters.SearchFallbackAdapter()]
+        : [new ProviderAdapters.JikanOfficialAdapter(), new ProviderAdapters.SearchFallbackAdapter()];
+
+    const result = await ProviderAdapters.getLinksWithFallback({
+        title,
+        episode: epNumber,
+        malId: resolvedMalId
+    }, adapters).catch(() => ({ links: [], provider: 'none' }));
+
+    result.links.forEach(item => {
         const a = document.createElement('a');
         a.href = item.href;
         a.target = '_blank';
@@ -157,14 +146,16 @@ const renderAlternativeLinks = async (title, epNumber) => {
         providerLinks.appendChild(a);
     });
 
-    if (!officialLinks.length) {
-        const hint = document.createElement('p');
-        hint.textContent = 'Official provider list unavailable for this title, showing search links.';
-        hint.style.marginTop = '8px';
-        hint.style.fontSize = '0.9rem';
-        hint.style.color = '#555';
-        providerLinks.appendChild(hint);
-    }
+    const hint = document.createElement('p');
+    hint.style.marginTop = '8px';
+    hint.style.fontSize = '0.9rem';
+    hint.style.color = '#555';
+    hint.textContent = demoMode
+        ? `Learning mode active: links are returned by ${result.provider}.`
+        : result.provider === 'jikan-official'
+            ? 'Loaded official provider links from Jikan metadata.'
+            : 'Official provider list unavailable; showing legal discovery links.';
+    providerLinks.appendChild(hint);
 };
 
 const showEpisode = (videoUrl) => {
