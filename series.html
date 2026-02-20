@@ -84,6 +84,7 @@
 <script>
 const params = new URLSearchParams(window.location.search);
 const seriesSlug = params.get('series');
+const malId = params.get('mal');
 const titleEl = document.getElementById('series-title');
 const descEl = document.getElementById('series-description');
 const listEl = document.getElementById('episode-list');
@@ -130,7 +131,30 @@ if (!seriesSlug) {
         return results;
     };
 
-    loadAllSeasons().then(seasons => {
+    const loadJikanEpisodes = async (animeId) => {
+        const pages = [1, 2, 3, 4];
+        const requests = pages.map(page =>
+            fetch(`https://api.jikan.moe/v4/anime/${animeId}/episodes?page=${page}`)
+                .then(res => res.ok ? res.json() : { data: [] })
+                .catch(() => ({ data: [] }))
+        );
+        const payloads = await Promise.all(requests);
+        const episodes = payloads.flatMap(p => p.data || []);
+        if (!episodes.length) throw new Error('No episodes found from Jikan.');
+        return [{
+            season: 1,
+            episodes: episodes.map(ep => ({
+                series: seriesSlug,
+                episode: ep.mal_id,
+                title: ep.title || `Episode ${ep.mal_id}`,
+                cover: ep.images?.jpg?.image_url || '',
+                description: ep.synopsis || 'No description available.',
+                videos: {}
+            }))
+        }];
+    };
+
+    const renderSeasons = (seasons) => {
         listEl.innerHTML = '';
         const label = document.createElement('label');
         label.htmlFor = 'season-selector';
@@ -171,9 +195,10 @@ if (!seriesSlug) {
                         <p class="episode-number-title">E${ep.episode} - ${ep.title}</p>
                         <p class="episode-description-preview">${ep.description || "No description available for this episode."}</p>
                         <div class="episode-version-links">
-                            ${ep.videos?.en ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=en">EN</a>` : ''}
-                            ${ep.videos?.ja ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=ja">JA</a>` : ''}
-                            ${ep.videos?.ko ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=ko">KO</a>` : ''}
+                            ${ep.videos?.en ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=en${malId ? `&mal=${malId}` : ''}">EN</a>` : ''}
+                            ${ep.videos?.ja ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=ja${malId ? `&mal=${malId}` : ''}">JA</a>` : ''}
+                            ${ep.videos?.ko ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=ko${malId ? `&mal=${malId}` : ''}">KO</a>` : ''}
+                            ${!ep.videos || (!ep.videos.en && !ep.videos.ja && !ep.videos.ko) ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=en${malId ? `&mal=${malId}` : ''}">WATCH OPTIONS</a>` : ''}
                         </div>
                     </div>
                 `;
@@ -183,11 +208,27 @@ if (!seriesSlug) {
 
         renderSeason(defaultSeason);
         selector.onchange = (e) => renderSeason(e.target.value);
-    })
-    .catch(err => {
-        document.getElementById('episode-loading').textContent = `Failed to load episodes for ${seriesSlug}.`;
-        console.error(err);
-    });
+    };
+
+    loadAllSeasons()
+        .then(renderSeasons)
+        .catch(async () => {
+            if (!malId) throw new Error('No local season files and no MAL id provided.');
+
+            const animeRes = await fetch(`https://api.jikan.moe/v4/anime/${malId}`);
+            if (animeRes.ok) {
+                const anime = (await animeRes.json()).data;
+                titleEl.textContent = anime.title;
+                descEl.textContent = anime.synopsis || 'No description available.';
+            }
+
+            const jikanSeasons = await loadJikanEpisodes(malId);
+            renderSeasons(jikanSeasons);
+        })
+        .catch(err => {
+            document.getElementById('episode-loading').textContent = `Failed to load episodes for ${seriesSlug}.`;
+            console.error(err);
+        });
 }
 </script>
 
