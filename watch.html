@@ -82,18 +82,33 @@ const navigateToEpisode = (num, ver = version) => {
     window.location.href = `watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${num}&version=${ver}${malQuery}`;
 };
 
-const buildAlternativeLinks = (title, epNumber) => {
+const buildFallbackLinks = (title, epNumber) => {
     const query = encodeURIComponent(`${title} episode ${epNumber}`);
     return [
-        { label: 'YouTube Search', href: `https://www.youtube.com/results?search_query=${query}` },
         { label: 'Crunchyroll Search', href: `https://www.crunchyroll.com/search?q=${query}` },
-        { label: 'AniList', href: `https://anilist.co/search/anime?search=${encodeURIComponent(title)}` }
+        { label: 'YouTube Search', href: `https://www.youtube.com/results?search_query=${query}` },
+        { label: 'AniList', href: `https://anilist.co/search/anime?search=${encodeURIComponent(title)}` },
+        { label: 'MyAnimeList', href: `https://myanimelist.net/anime.php?q=${encodeURIComponent(title)}` }
     ];
 };
 
-const renderAlternativeLinks = (title, epNumber) => {
+const fetchOfficialStreamingLinks = async () => {
+    if (!malId) return [];
+    const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}/full`);
+    if (!res.ok) return [];
+    const payload = await res.json();
+    const streaming = payload?.data?.streaming || [];
+    return streaming
+        .filter(item => item?.url && item?.name)
+        .map(item => ({ label: item.name, href: item.url }));
+};
+
+const renderAlternativeLinks = async (title, epNumber) => {
     providerLinks.innerHTML = '<strong>Alternative watch links:</strong> ';
-    buildAlternativeLinks(title, epNumber).forEach(item => {
+    const officialLinks = await fetchOfficialStreamingLinks().catch(() => []);
+    const linksToShow = officialLinks.length ? officialLinks : buildFallbackLinks(title, epNumber);
+
+    linksToShow.forEach(item => {
         const a = document.createElement('a');
         a.href = item.href;
         a.target = '_blank';
@@ -104,6 +119,15 @@ const renderAlternativeLinks = (title, epNumber) => {
         a.style.display = 'inline-block';
         providerLinks.appendChild(a);
     });
+
+    if (!officialLinks.length) {
+        const hint = document.createElement('p');
+        hint.textContent = 'Official provider list unavailable for this title, showing search links.';
+        hint.style.marginTop = '8px';
+        hint.style.fontSize = '0.9rem';
+        hint.style.color = '#555';
+        providerLinks.appendChild(hint);
+    }
 };
 
 const showEpisode = (videoUrl) => {
