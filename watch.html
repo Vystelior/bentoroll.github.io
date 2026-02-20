@@ -63,7 +63,7 @@
 const params = new URLSearchParams(window.location.search);
 const epNum = parseInt(params.get('episode'));
 const seriesSlug = params.get('series') || 'gachiakuta';
-const malId = params.get('mal');
+const malIdFromQuery = params.get('mal');
 const seasonNum = parseInt(params.get('season')) || 1;
 let version = params.get('version') || 'en';
 
@@ -76,9 +76,46 @@ const versionButtons = document.getElementById('version-buttons');
 const providerLinks = document.getElementById('provider-links');
 const intro = document.getElementById('introVideo');
 
+let resolvedMalId = malIdFromQuery || '';
+
 const capitalize = s => typeof s === 'string' ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+
+const unslugify = (slug = '') => slug
+    .replace(/-/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const resolveMalId = async () => {
+    if (malIdFromQuery) return malIdFromQuery;
+
+    const searchTerms = [unslugify(seriesSlug)];
+    try {
+        const localRes = await fetch('data/series.json');
+        if (localRes.ok) {
+            const localSeries = await localRes.json();
+            const localMatch = localSeries.find(item => item.slug === seriesSlug);
+            if (localMatch?.title) searchTerms.unshift(localMatch.title);
+        }
+    } catch (err) {
+        console.error('Failed to load local series index for MAL resolve:', err);
+    }
+
+    for (const term of searchTerms.filter(Boolean)) {
+        try {
+            const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(term)}&limit=1&sfw=true`);
+            if (!res.ok) continue;
+            const payload = await res.json();
+            const candidate = payload?.data?.[0];
+            if (candidate?.mal_id) return String(candidate.mal_id);
+        } catch {
+            // try next term
+        }
+    }
+
+    return '';
+};
 const navigateToEpisode = (num, ver = version) => {
-    const malQuery = malId ? `&mal=${malId}` : '';
+    const malQuery = resolvedMalId ? `&mal=${resolvedMalId}` : '';
     window.location.href = `watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${num}&version=${ver}${malQuery}`;
 };
 
@@ -93,8 +130,8 @@ const buildFallbackLinks = (title, epNumber) => {
 };
 
 const fetchOfficialStreamingLinks = async () => {
-    if (!malId) return [];
-    const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}/full`);
+    if (!resolvedMalId) return [];
+    const res = await fetch(`https://api.jikan.moe/v4/anime/${resolvedMalId}/full`);
     if (!res.ok) return [];
     const payload = await res.json();
     const streaming = payload?.data?.streaming || [];
@@ -147,10 +184,10 @@ const loadLocalEpisodes = async () => {
 };
 
 const loadJikanEpisode = async () => {
-    if (!malId) throw new Error('No MAL id available.');
+    if (!resolvedMalId) throw new Error('No MAL id available.');
     const [animeRes, epRes] = await Promise.all([
-        fetch(`https://api.jikan.moe/v4/anime/${malId}`),
-        fetch(`https://api.jikan.moe/v4/anime/${malId}/episodes/${epNum}`)
+        fetch(`https://api.jikan.moe/v4/anime/${resolvedMalId}`),
+        fetch(`https://api.jikan.moe/v4/anime/${resolvedMalId}/episodes/${epNum}`)
     ]);
     const anime = animeRes.ok ? (await animeRes.json()).data : null;
     const epData = epRes.ok ? (await epRes.json()).data : null;
@@ -165,7 +202,10 @@ const loadJikanEpisode = async () => {
 };
 
 Promise.resolve()
-.then(() => loadLocalEpisodes().catch(loadJikanEpisode))
+.then(async () => {
+    resolvedMalId = await resolveMalId();
+    return loadLocalEpisodes().catch(loadJikanEpisode);
+})
 .then(episodes => {
     episodes.sort((a,b) => a.episode - b.episode);
     const currentIndex = episodes.findIndex(e => e.episode === epNum);

@@ -84,30 +84,66 @@
 <script>
 const params = new URLSearchParams(window.location.search);
 const seriesSlug = params.get('series');
-const malId = params.get('mal');
+const malIdFromQuery = params.get('mal');
 const titleEl = document.getElementById('series-title');
 const descEl = document.getElementById('series-description');
 const listEl = document.getElementById('episode-list');
 const seasonContainer = document.getElementById('season-container');
 
-if (!seriesSlug) {
-    titleEl.textContent = "Series not specified.";
-    document.getElementById('episode-loading').style.display = 'none';
-} else {
-    fetch('data/series.json')
-    .then(res => res.json())
-    .then(seriesList => {
+
+const unslugify = (slug = '') => slug
+    .replace(/-/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const resolveSeriesContext = async () => {
+    const base = {
+        malId: malIdFromQuery,
+        displayTitle: unslugify(seriesSlug)
+    };
+
+    try {
+        const res = await fetch('data/series.json');
+        const seriesList = await res.json();
         const seriesData = seriesList.find(s => s.slug === seriesSlug);
         if (seriesData) {
             titleEl.textContent = seriesData.title;
             descEl.textContent = seriesData.description || "No description is available for this series.";
             document.title = `${seriesData.title} | BentoRoll`;
+            base.displayTitle = seriesData.title;
         } else {
             titleEl.textContent = seriesSlug.toUpperCase();
             descEl.textContent = "Series details not found.";
         }
-    })
-    .catch(console.error);
+
+        if (!base.malId) {
+            const searchTerms = [seriesData?.title, unslugify(seriesSlug)].filter(Boolean);
+            for (const term of searchTerms) {
+                const searchRes = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(term)}&limit=1&sfw=true`);
+                if (!searchRes.ok) continue;
+                const payload = await searchRes.json();
+                const candidate = payload?.data?.[0];
+                if (candidate?.mal_id) {
+                    base.malId = String(candidate.mal_id);
+                    if (!seriesData) {
+                        titleEl.textContent = candidate.title || base.displayTitle;
+                        descEl.textContent = candidate.synopsis || "No description is available for this series.";
+                    }
+                    break;
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Series context load error:', err);
+    }
+
+    return base;
+};
+
+if (!seriesSlug) {
+    titleEl.textContent = "Series not specified.";
+    document.getElementById('episode-loading').style.display = 'none';
+} else {
 
     const loadSeason = async (n) => {
         const path = `data/${seriesSlug}/season${n}.json`;
@@ -140,7 +176,6 @@ if (!seriesSlug) {
         );
         const payloads = await Promise.all(requests);
         const episodes = payloads.flatMap(p => p.data || []);
-        if (!episodes.length) throw new Error('No episodes found from Jikan.');
         return [{
             season: 1,
             episodes: episodes.map(ep => ({
@@ -182,6 +217,12 @@ if (!seriesSlug) {
         const renderSeason = (seasonNum) => {
             const seasonData = seasons.find(s => s.season == seasonNum);
             listEl.innerHTML = '';
+
+            if (!seasonData.episodes.length) {
+                listEl.innerHTML = '<p class="episode-description-preview">No episodes are listed yet for this title. Check back later.</p>';
+                return;
+            }
+
             seasonData.episodes.sort((a,b) => a.episode - b.episode).forEach(ep => {
                 const item = document.createElement('div');
                 item.className = 'episode-list-item';
@@ -195,10 +236,10 @@ if (!seriesSlug) {
                         <p class="episode-number-title">E${ep.episode} - ${ep.title}</p>
                         <p class="episode-description-preview">${ep.description || "No description available for this episode."}</p>
                         <div class="episode-version-links">
-                            ${ep.videos?.en ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=en${malId ? `&mal=${malId}` : ''}">EN</a>` : ''}
-                            ${ep.videos?.ja ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=ja${malId ? `&mal=${malId}` : ''}">JA</a>` : ''}
-                            ${ep.videos?.ko ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=ko${malId ? `&mal=${malId}` : ''}">KO</a>` : ''}
-                            ${!ep.videos || (!ep.videos.en && !ep.videos.ja && !ep.videos.ko) ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=en${malId ? `&mal=${malId}` : ''}">WATCH OPTIONS</a>` : ''}
+                            ${ep.videos?.en ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=en${resolvedMalId ? `&mal=${resolvedMalId}` : ''}">EN</a>` : ''}
+                            ${ep.videos?.ja ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=ja${resolvedMalId ? `&mal=${resolvedMalId}` : ''}">JA</a>` : ''}
+                            ${ep.videos?.ko ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=ko${resolvedMalId ? `&mal=${resolvedMalId}` : ''}">KO</a>` : ''}
+                            ${!ep.videos || (!ep.videos.en && !ep.videos.ja && !ep.videos.ko) ? `<a href="watch.html?series=${seriesSlug}&season=${seasonNum}&episode=${ep.episode}&version=en${resolvedMalId ? `&mal=${resolvedMalId}` : ''}">WATCH OPTIONS</a>` : ''}
                         </div>
                     </div>
                 `;
@@ -210,19 +251,25 @@ if (!seriesSlug) {
         selector.onchange = (e) => renderSeason(e.target.value);
     };
 
-    loadAllSeasons()
+    let resolvedMalId = malIdFromQuery;
+
+    resolveSeriesContext()
+        .then(context => {
+            resolvedMalId = context.malId;
+            return loadAllSeasons();
+        })
         .then(renderSeasons)
         .catch(async () => {
-            if (!malId) throw new Error('No local season files and no MAL id provided.');
+            if (!resolvedMalId) throw new Error('No local season files and no MAL id provided.');
 
-            const animeRes = await fetch(`https://api.jikan.moe/v4/anime/${malId}`);
+            const animeRes = await fetch(`https://api.jikan.moe/v4/anime/${resolvedMalId}`);
             if (animeRes.ok) {
                 const anime = (await animeRes.json()).data;
                 titleEl.textContent = anime.title;
                 descEl.textContent = anime.synopsis || 'No description available.';
             }
 
-            const jikanSeasons = await loadJikanEpisodes(malId);
+            const jikanSeasons = await loadJikanEpisodes(resolvedMalId);
             renderSeasons(jikanSeasons);
         })
         .catch(err => {
