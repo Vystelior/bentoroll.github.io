@@ -168,7 +168,12 @@ if (!seriesSlug) {
     };
 
     const loadJikanEpisodes = async (animeId) => {
-        const pages = [1, 2, 3, 4];
+        const animeRes = await fetch(`https://api.jikan.moe/v4/anime/${animeId}`)
+            .then(res => res.ok ? res.json() : { data: null })
+            .catch(() => ({ data: null }));
+        const anime = animeRes.data;
+
+        const pages = [1, 2, 3, 4, 5, 6];
         const requests = pages.map(page =>
             fetch(`https://api.jikan.moe/v4/anime/${animeId}/episodes?page=${page}`)
                 .then(res => res.ok ? res.json() : { data: [] })
@@ -176,13 +181,28 @@ if (!seriesSlug) {
         );
         const payloads = await Promise.all(requests);
         const episodes = payloads.flatMap(p => p.data || []);
+
+        if (!episodes.length) {
+            return [{
+                season: 1,
+                episodes: [{
+                    series: anime?.title || seriesSlug,
+                    episode: 1,
+                    title: anime?.title || 'Title details',
+                    cover: anime?.images?.jpg?.large_image_url || anime?.images?.jpg?.image_url || '',
+                    description: anime?.synopsis || 'No episodic data is published yet. Open watch options to view providers and updates.',
+                    videos: {}
+                }]
+            }];
+        }
+
         return [{
             season: 1,
             episodes: episodes.map(ep => ({
-                series: seriesSlug,
+                series: anime?.title || seriesSlug,
                 episode: ep.mal_id,
                 title: ep.title || `Episode ${ep.mal_id}`,
-                cover: ep.images?.jpg?.image_url || '',
+                cover: ep.images?.jpg?.image_url || anime?.images?.jpg?.image_url || '',
                 description: ep.synopsis || 'No description available.',
                 videos: {}
             }))

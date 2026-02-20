@@ -62,7 +62,7 @@
 <script src="/src/scripts/provider-adapters.js"></script>
 <script>
 const params = new URLSearchParams(window.location.search);
-const epNum = parseInt(params.get('episode'));
+const epNum = parseInt(params.get('episode')) || 1;
 const seriesSlug = params.get('series') || 'gachiakuta';
 const malIdFromQuery = params.get('mal');
 const seasonNum = parseInt(params.get('season')) || 1;
@@ -192,15 +192,10 @@ const loadJikanEpisode = async () => {
     }];
 };
 
-Promise.resolve()
-.then(async () => {
-    resolvedMalId = await resolveMalId();
-    return loadLocalEpisodes().catch(loadJikanEpisode);
-})
-.then(episodes => {
+const renderEpisode = (episodes) => {
     episodes.sort((a,b) => a.episode - b.episode);
     const currentIndex = episodes.findIndex(e => e.episode === epNum);
-    const ep = episodes[currentIndex];
+    const ep = episodes[currentIndex] || episodes[0];
 
     if (!ep) throw new Error('Episode not found');
 
@@ -246,7 +241,25 @@ Promise.resolve()
     }
 
     renderAlternativeLinks(displaySeriesTitle, ep.episode);
+};
+
+Promise.resolve()
+.then(async () => {
+    resolvedMalId = await resolveMalId();
+
+    if (demoMode) {
+        return [{
+            episode: epNum,
+            title: 'Adapter Demo Episode',
+            description: 'Demo mode is active. This episode card is synthetic so you can test adapter behavior without local episode JSON.',
+            videos: {},
+            series: capitalize(seriesSlug)
+        }];
+    }
+
+    return loadLocalEpisodes().catch(loadJikanEpisode);
 })
+.then(renderEpisode)
 .catch(err => {
     console.error('Error loading:', err);
     episodeTitle.textContent = 'Failed to load episode data.';
