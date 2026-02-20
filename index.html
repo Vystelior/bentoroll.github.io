@@ -184,37 +184,84 @@
 </footer>
 
 <script>
-// Load series dynamically
-fetch('data/series.json')
-.then(res => {
+const slugify = (value = '') => value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+const fetchLocalSeries = async () => {
+    const res = await fetch('data/series.json');
     if (!res.ok) throw new Error('Series data not found.');
     return res.json();
-})
-.then(seriesList => {
-    const container = document.getElementById('series-container');
-    container.innerHTML = '';
-    seriesList.sort((a,b)=>a.title.localeCompare(b.title));
-    seriesList.forEach(series => {
-        const card = document.createElement('div');
-        card.className = 'series-card';
-        card.setAttribute('tabindex','0');
-        card.innerHTML = `
-            <img src="${series.poster}" alt="${series.title} Poster">
-            <div class="series-info">
-                <h3>${series.title}</h3>
-            </div>
-        `;
-        card.onclick = () => window.location.href = `series.html?series=${series.slug}`;
-        card.onkeypress = e => { if(e.key==='Enter') card.click(); };
-        container.appendChild(card);
+};
+
+const fetchSeasonalSeries = async () => {
+    // Jikan gives actively airing anime, so the home page refreshes automatically as seasons change.
+    const pages = [1, 2, 3];
+    const requests = pages.map(page =>
+        fetch(`https://api.jikan.moe/v4/seasons/now?page=${page}&limit=24&sfw=true`)
+            .then(res => res.ok ? res.json() : { data: [] })
+            .catch(() => ({ data: [] }))
+    );
+
+    const payloads = await Promise.all(requests);
+    const combined = payloads.flatMap(payload => payload.data || []);
+
+    return combined.map(anime => ({
+        slug: slugify(anime.title || `anime-${anime.mal_id}`),
+        title: anime.title,
+        description: anime.synopsis || 'No description available.',
+        poster: anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url,
+        malId: anime.mal_id,
+        source: 'jikan'
+    }));
+};
+
+const dedupeSeries = (seriesList) => {
+    const seen = new Set();
+    return seriesList.filter(item => {
+        const key = item.malId ? `mal-${item.malId}` : item.slug;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
     });
-})
-.catch(err => {
-    const loadingText = document.getElementById('loading-text');
-    loadingText.textContent = 'Error loading series. Please try again later.';
-    loadingText.style.color = '#e1501d';
-    console.error(err);
-});
+};
+
+Promise.allSettled([fetchLocalSeries(), fetchSeasonalSeries()])
+    .then(results => {
+        const localSeries = results[0].status === 'fulfilled' ? results[0].value : [];
+        const seasonalSeries = results[1].status === 'fulfilled' ? results[1].value : [];
+        const seriesList = dedupeSeries([...localSeries, ...seasonalSeries]);
+
+        const container = document.getElementById('series-container');
+        container.innerHTML = '';
+
+        seriesList.sort((a, b) => a.title.localeCompare(b.title));
+        seriesList.forEach(series => {
+            const card = document.createElement('div');
+            card.className = 'series-card';
+            card.setAttribute('tabindex', '0');
+            card.innerHTML = `
+                <img src="${series.poster}" alt="${series.title} Poster">
+                <div class="series-info">
+                    <h3>${series.title}</h3>
+                </div>
+            `;
+
+            const malParam = series.malId ? `&mal=${series.malId}` : '';
+            card.onclick = () => window.location.href = `series.html?series=${series.slug}${malParam}`;
+            card.onkeypress = e => { if (e.key === 'Enter') card.click(); };
+            container.appendChild(card);
+        });
+
+        if (!seriesList.length) throw new Error('No series available.');
+    })
+    .catch(err => {
+        const loadingText = document.getElementById('loading-text');
+        loadingText.textContent = 'Error loading series. Please try again later.';
+        loadingText.style.color = '#e1501d';
+        console.error(err);
+    });
 </script>
 
 <!-- Modular Navbar JS -->

@@ -82,6 +82,28 @@ This structure allows for easy addition of new series and episodes.
 * **CSS**: Written in plain CSS; consider using preprocessors like SASS for larger projects.
 * **JavaScript**: Functions are modular; consider using ES6 modules for better maintainability.
 
+
+## 🎓 Learning Outcome: Provider Adapter Demo
+
+This project now includes a **provider adapter pattern** in `src/scripts/provider-adapters.js` that demonstrates how to integrate multiple APIs behind one interface.
+
+### What you can learn
+
+- How to define a common adapter contract (`getWatchLinks`) for different providers.
+- How to normalize output into one shape (`{ source, label, href, type }`).
+- How to run providers with fallback priority (`official -> search fallback`).
+- How to add a mock adapter for safe local demos.
+
+### Demo mode
+
+Open a watch URL with `demo=1` to force mock provider output and inspect the integration flow:
+
+```text
+watch.html?series=gachiakuta&season=1&episode=1&version=en&demo=1
+```
+
+In normal mode, the page tries Jikan official provider metadata first, then falls back to legal discovery links.
+
 ## 📌 Future Enhancements
 
 * Implement search and filtering capabilities.
